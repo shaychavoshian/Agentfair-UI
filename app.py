@@ -70,6 +70,7 @@ def init_state():
         "subgroup": "",
         "label_value": 1.0,
         "dbdm_metrics": {},
+        "dbdm_risk_levels": {},
         "dbdm_json_path": None,
         "human_answers": {},
         "all_results": [],
@@ -179,15 +180,16 @@ elif st.session_state.step == 2:
     if not st.session_state.dbdm_metrics and not st.session_state.dbdm_error:
         with st.spinner("Running DBDM — calculating 15 fairness metrics…"):
             try:
-                metrics, json_path = run_dbdm(
+                metrics, risk_levels, json_path = run_dbdm(
                     file_path=st.session_state.csv_path,
                     facet=st.session_state.facet,
                     outcome=st.session_state.outcome,
                     subgroup_col=st.session_state.subgroup,
                     label_value=st.session_state.label_value,
                 )
-                st.session_state.dbdm_metrics   = metrics
-                st.session_state.dbdm_json_path = json_path
+                st.session_state.dbdm_metrics     = metrics
+                st.session_state.dbdm_risk_levels = risk_levels
+                st.session_state.dbdm_json_path   = json_path
             except Exception as e:
                 st.session_state.dbdm_error = str(e)
 
@@ -204,13 +206,15 @@ elif st.session_state.step == 2:
     st.markdown("#### All DBDM Metrics")
     rows = []
     for name, val in metrics.items():
-        risky = _metric_is_risky(name, val)
-        thr   = THRESHOLD_DISPLAY.get(name, "±0.1")
+        risky      = _metric_is_risky(name, val)
+        thr        = THRESHOLD_DISPLAY.get(name, "±0.1")
+        risk_level = st.session_state.dbdm_risk_levels.get(name, "—")
         rows.append({
-            "Metric": name,
-            "Value": round(float(val), 4) if val is not None else "—",
-            "Threshold": thr,
-            "Status": "⚠️ RISKY" if risky else "✅ FAIR",
+            "Metric":        name,
+            "Value":         round(float(val), 4) if val is not None else "—",
+            "Threshold":     thr,
+            "DBDM Risk Level": risk_level,
+            "Status":        "⚠️ RISKY" if risky else "✅ FAIR",
         })
     mdf = pd.DataFrame(rows)
     def color_status(row):
@@ -473,13 +477,15 @@ elif st.session_state.step == 4:
     with st.expander("📊 DBDM Metrics (Step 2 results)", expanded=False):
         m_rows = []
         for name, val in st.session_state.dbdm_metrics.items():
-            risky_m = _metric_is_risky(name, val)
-            thr = THRESHOLD_DISPLAY.get(name, "±0.1")
+            risky_m    = _metric_is_risky(name, val)
+            thr        = THRESHOLD_DISPLAY.get(name, "±0.1")
+            risk_level = st.session_state.dbdm_risk_levels.get(name, "—")
             m_rows.append({
-                "Metric": name,
-                "Value": round(float(val), 4) if val is not None else "—",
-                "Threshold": thr,
-                "Status": "⚠️ RISKY" if risky_m else "✅ FAIR",
+                "Metric":          name,
+                "Value":           round(float(val), 4) if val is not None else "—",
+                "Threshold":       thr,
+                "DBDM Risk Level": risk_level,
+                "Status":          "⚠️ RISKY" if risky_m else "✅ FAIR",
             })
         mdf2 = pd.DataFrame(m_rows)
         def cs2(row):
@@ -627,9 +633,10 @@ elif st.session_state.step == 4:
         },
         "dbdm_metrics": {
             k: {
-                "value": v,
-                "threshold": THRESHOLD_DISPLAY.get(k, "±0.1"),
-                "is_risky": _metric_is_risky(k, v),
+                "value":      v,
+                "threshold":  THRESHOLD_DISPLAY.get(k, "±0.1"),
+                "is_risky":   _metric_is_risky(k, v),
+                "risk_level": st.session_state.dbdm_risk_levels.get(k, "—"),
             }
             for k, v in st.session_state.dbdm_metrics.items()
         },
